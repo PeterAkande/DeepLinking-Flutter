@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 void main() {
   runApp(const MyApp());
@@ -80,6 +81,10 @@ class _MyHomePageState extends State<MyHomePage> {
               TextField(
                 controller: _simpleTagController,
                 decoration: const InputDecoration(hintText: 'Enter a Tag'),
+                inputFormatters: [
+                  //Prevent space between characters
+                  FilteringTextInputFormatter.deny(RegExp(' '))
+                ],
               ),
               const SizedBox(
                 height: 10,
