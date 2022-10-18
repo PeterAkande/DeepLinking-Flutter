@@ -1,7 +1,17 @@
+import 'package:deeplinking_flutter/link_details_screen.dart';
+import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-void main() {
+import 'firebase_options.dart';
+import 'package:firebase_core/firebase_core.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // iOS requires you run in release mode to test dynamic links ("flutter run --release").
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -12,11 +22,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Flutter Demo',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Deeplinking Test'),
     );
   }
 }
@@ -44,14 +55,65 @@ class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _simpleTagController =
       TextEditingController(); //To hold a simple tag to be passed
 
+  String url = '';
+
+  FirebaseDynamicLinks dynamicLinks = FirebaseDynamicLinks.instance;
+
+  @override
+  initState() {
+    super.initState();
+
+    initDynamicLinks();
+  }
+
+  Future<void> initDynamicLinks() async {
+    dynamicLinks.onLink.listen((dynamicLinkData) {
+      print(dynamicLinkData.link.path);
+      print(dynamicLinkData.link.queryParameters);
+      print(dynamicLinkData.link.removeFragment());
+
+      if (dynamicLinkData.link.pathSegments.isNotEmpty) {
+        //Here, the queryparameter is a Map.
+
+        String postTitle = dynamicLinkData.link.queryParameters['post'] ?? '';
+        String postTag = dynamicLinkData.link.queryParameters['tag'] ?? '';
+        WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) =>
+                  LinkDetailsScreen(postTitle: postTitle, postTag: postTag),
+            ),
+          ); // Push the new route with the parameters gotten
+        });
+      }
+    }).onError((error) {
+      print('onLink error');
+      print(error.message);
+    });
+  }
+
+  Future createDynamicString() async {
+    //This function would be used to create a dynamic link
+    final DynamicLinkParameters dynamicLinkParameters = DynamicLinkParameters(
+      link: Uri.parse(
+          'https://frenbox.com/share_fren/?post=${_postTitleController.text}&tag=${_simpleTagController.text}'),
+      uriPrefix: 'https://pilad.page.link',
+      androidParameters: const AndroidParameters(
+          packageName: 'com.pilad.deeplinking_flutter', minimumVersion: 0),
+    );
+    Uri uri;
+
+    final ShortDynamicLink shortLink =
+        await dynamicLinks.buildShortLink(dynamicLinkParameters);
+    uri = shortLink.shortUrl;
+
+    url = 'https://pilad.page.link${uri.path}';
+
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
         // Here we take the value from the MyHomePage object that was created by
@@ -89,25 +151,59 @@ class _MyHomePageState extends State<MyHomePage> {
               const SizedBox(
                 height: 10,
               ),
-              ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.share),
-                  label: Text(
-                    'Share',
-                    style: Theme.of(context).textTheme.headline3?.copyWith(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white),
-                  ))
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed: () async {
+                      showDialog(
+                        context: context,
+                        builder: (context) => const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                      await createDynamicString().then((value) {
+                        Navigator.of(context)
+                            .pop(); //Disable the loading progress
+                      });
+                    },
+                    child: Text(
+                      'Create Link',
+                      style: Theme.of(context).textTheme.headline3?.copyWith(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: url));
+                    },
+                    icon: const Icon(Icons.copy),
+                    label: Text(
+                      'Copy to Clipboard',
+                      style: Theme.of(context).textTheme.headline3?.copyWith(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(
+                height: 10,
+              ),
+              Text(
+                url,
+                style: Theme.of(context)
+                    .textTheme
+                    .headline3
+                    ?.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
             ],
           ),
         ),
       ),
-      // floatingActionButton: FloatingActionButton(
-      //   onPressed: _incrementCounter,
-      //   tooltip: 'Increment',
-      //   child: const Icon(Icons.add),
-      // ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
